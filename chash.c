@@ -5,67 +5,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#ifdef DEBUG_ENABLE
-
-static const char*
-log_level_to_string(enum log_level level)
-{
-  switch (level) {
-    case OFF:
-      return "OFF";
-    case FATAL:
-      return "FATAL";
-    case ERROR:
-      return "ERROR";
-    case WARN:
-      return "WARN";
-    case INFO:
-      return "INFO";
-    case DEBUG:
-      return "DEBUG";
-    case ALL:
-      return "ALL";
-    default:
-      return NULL;
-  }
-}
-static void
-debug_printf(unsigned long t,
-             const char* fname,
-             enum log_level level,
-             const char* format,
-             ...)
-{
-  struct node* mynode = get_own_node();
-  FILE* out = stdout;
-  if (level <= ERROR) {
-    out = stderr;
-  }
-
-  if ((level & DEBUG_LEVEL) != level) {
-    return;
-  }
-  char max_func_name[DEBUG_MAX_FUNC_NAME];
-  memset(max_func_name, 0, DEBUG_MAX_FUNC_NAME);
-  strncpy(max_func_name, fname, DEBUG_MAX_FUNC_NAME - 1);
-  for (int i = strlen(max_func_name); i < DEBUG_MAX_FUNC_NAME - 1; i++) {
-    max_func_name[i] = ' ';
-  }
-  fprintf(out,
-          "%lu: [%d|%d] [%s] %s: ",
-          t,
-          mynode->id,
-          _getpid(),
-          log_level_to_string(level),
-          max_func_name);
-  va_list args;
-  va_start(args, format);
-  vfprintf(out, format, args);
-  va_end(args);
-  return;
-}
-#endif
-
 static int
 send_chunk(unsigned char* buf,
            size_t size,
@@ -115,8 +54,6 @@ handle_get(unsigned char* data,
 
   unsigned char msg[resp_size + CHORD_HEADER_SIZE];
   marshall_msg(MSG_TYPE_GET_RESP, src, resp_size, content, msg);
-  DEBUG(INFO, "Return %s\n", msg + CHORD_HEADER_SIZE);
-
   int ret = chord_send_nonblock_sock(
     sock, msg, CHORD_HEADER_SIZE + resp_size, src_addr, src_addr_size);
   return ret;
