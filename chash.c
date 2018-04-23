@@ -14,8 +14,8 @@ send_chunk(unsigned char* buf,
 {
   assert((size + hash_size + sizeof(size_t)) < MAX_MSG_SIZE);
   unsigned char msg[MAX_MSG_SIZE];
-  memset(msg, 0, sizeof(msg)),
-    DEBUG(INFO, "Send %d bytes (%p) to node %d\n", size, buf, target->id);
+  memset(msg, 0, sizeof(msg));
+  DEBUG(INFO, "Send %d bytes (%p) to node %d\n", size, buf, target->id);
   marshall_msg(
     MSG_TYPE_PUT, target->id, sizeof(size_t), (unsigned char*)&size, msg);
   int offset = CHORD_HEADER_SIZE + sizeof(size_t);
@@ -25,6 +25,9 @@ send_chunk(unsigned char* buf,
   chord_msg_t type = chord_send_block_and_wait(
     target, msg, offset + size, MSG_TYPE_PUT_ACK, NULL, 0);
   DEBUG(INFO, "Got message with type %d as response\n", (type));
+  if (type == MSG_TYPE_CHORD_ERR) {
+    return CHORD_ERR;
+  }
   return CHORD_OK;
 }
 
