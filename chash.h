@@ -1,12 +1,6 @@
 #ifndef _LIBCHASH_H
 #define _LIBCHASH_H
 #include "../chord/chord.h"
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <time.h>
 #define CHASH_OK (0)
 #define CHASH_ERR (-1)
 #define CHASH_CHUNK_SIZE (256)
