@@ -32,12 +32,13 @@ send_chunk(unsigned char* buf,
 }
 
 int
-handle_get(unsigned char* data,
+handle_get(chord_msg_t type,unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
            size_t src_addr_size)
 {
+  assert(type == MSG_TYPE_GET);
   DEBUG(INFO, "HANDLE GET CALLED\n");
   struct key* search_key = NULL;
   size_t resp_size = 0;
@@ -63,12 +64,14 @@ handle_get(unsigned char* data,
 }
 
 int
-handle_put(unsigned char* data,
+handle_put(chord_msg_t type,unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
            size_t src_addr_size)
 {
+    assert(type == MSG_TYPE_PUT);
+
   DEBUG(INFO, "HANDLE PUT CALLED. Send answer\n");
   struct key** first_key = get_first_key();
   struct key* new = NULL;

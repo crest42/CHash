@@ -12,13 +12,13 @@ int
 get(nodeid_t id, unsigned char* buf);
 
 int
-handle_get(unsigned char* data,
+handle_get(chord_msg_t type,unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
            size_t src_addr_size);
 int
-handle_put(unsigned char* data,
+handle_put(chord_msg_t type, unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
