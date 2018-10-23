@@ -1,5 +1,6 @@
 #include "chash.h"
-#include "../chord/chord.h"
+#include "../chord/include/chord.h"
+#include "../chord/include/network.h"
 #include <assert.h>
 #include <errno.h>
 #include <sys/time.h>
