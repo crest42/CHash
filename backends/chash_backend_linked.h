@@ -1,7 +1,7 @@
-#ifndef _LIBCHASH_STORE_LINKED_H
-#define _LIBCHASH_STORE_LINKED_H
-#include "chash.h"
-#include "chash_store_linked_private.h"
+#ifndef _LIBCHASH_BACKEND_LINKED_H
+#define _LIBCHASH_BACKEND_LINKED_H
+#include "../chash.h"
+#include "chash_backend_linked_internal.h"
 #include <stdio.h> //TODO: Remove
 struct key**
 get_first_key(void);
