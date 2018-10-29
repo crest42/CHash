@@ -21,8 +21,7 @@ void dump(unsigned char *data,uint32_t size) {
     printf("\n");
 }
 
-int chash_linked_list_put(uint32_t offset,uint32_t size, nodeid_t id, unsigned char *hash, unsigned char *data) {
-  (void)id;
+int chash_linked_list_put(struct item *item, unsigned char *data) {
   bool found = false;
   struct key** first_key = get_first_key();
   struct key *new = NULL, *last = *first_key;
@@ -33,11 +32,11 @@ int chash_linked_list_put(uint32_t offset,uint32_t size, nodeid_t id, unsigned c
   } else {
     DEBUG(INFO, "first key is not null search for last\n");
     for (new = *first_key; new != NULL; new = new->next) {
-      if(memcmp(new->hash,hash,HASH_DIGEST_SIZE) == 0) {
-        assert((offset+size) <= new->size);
+      if(memcmp(new->hash,item->hash,HASH_DIGEST_SIZE) == 0) {
+        assert((item->offset+item->size) <= new->size);
         //printf("overwrite block with size %d and offset %d\n",size,offset);
         //dump(data,size);
-        memcpy(new->data+offset,data,size);
+        memcpy(new->data+item->offset,data,item->size);
         found = true;
         break;
       }
@@ -53,9 +52,9 @@ int chash_linked_list_put(uint32_t offset,uint32_t size, nodeid_t id, unsigned c
   if(!found) {
     //printf("insert new block with size %d and offset %d\n",size,offset);
     new->size = 128;
-    memcpy(new->hash, hash, HASH_DIGEST_SIZE);
+    memcpy(new->hash, item->hash, HASH_DIGEST_SIZE);
     new->data = malloc(new->size);
-    memcpy(new->data+offset, data, size);
+    memcpy(new->data+item->offset, data, item->size);
     new->id = get_mod_of_hash(new->hash, CHORD_RING_SIZE);
     new->next = NULL;
     DEBUG(INFO,

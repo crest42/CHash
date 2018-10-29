@@ -4,27 +4,52 @@
 #include <stdint.h>
 #define CHASH_OK (0)
 #define CHASH_ERR (-1)
-#define CHASH_CHUNK_SIZE (256)
+#define CHASH_CHUNK_SIZE (128)
 
-typedef int (*chash_storage_put)(uint32_t,
-                                 uint32_t,
-                                 nodeid_t,
-                                 unsigned char*,
+struct item {
+  unsigned char hash[HASH_DIGEST_SIZE];
+  uint32_t flags;
+  uint32_t offset;
+  uint32_t size;
+};
+
+
+typedef int (*chash_backend_put)(struct item *,
                                  unsigned char*);
 
-typedef int (*chash_storage_get)(unsigned char*,
+typedef int (*chash_backend_get)(unsigned char*,
                                  nodeid_t *,
                                  uint32_t *,
                                  unsigned char**);
 
-struct chash_storage_backend {
-    chash_storage_put put;
-    chash_storage_get get;
+typedef int (*chash_frontend_put)(uint32_t,
+                                 unsigned char *,
+                                 uint32_t,
+                                 uint32_t,
+                                 unsigned char*);
+
+typedef int (*chash_frontend_get)(uint32_t,
+                                 unsigned char*,
+                                 uint32_t ,
+                                 unsigned char *);
+
+struct chash_backend {
+    chash_backend_put put;
+    chash_backend_get get;
     void *data;
 };
 
+struct chash_frontend {
+    chash_frontend_put put;
+    chash_frontend_get get;
+    chord_callback put_handler;
+    chord_callback get_handler;
+    void* data;
+};
+
+
 int
-put(unsigned char* data, size_t size, nodeid_t* id);
+put(unsigned char* data, size_t size);
 
 int
 get(unsigned char* buf,uint32_t size);
@@ -43,11 +68,13 @@ handle_put(chord_msg_t type,
            struct sockaddr* src_addr,
            size_t src_addr_size);
 int
-init_chash(struct chash_storage_backend *b);
+init_chash(struct chash_backend *b,struct chash_frontend *f);
 
 int
-chash_get_block(int block, unsigned char* ret);
+put_raw(unsigned char* data,
+        struct item *item,
+        struct node *target);
 int
-chash_put_block(unsigned char* data, int block,uint32_t offset, uint32_t size);
+get_raw(unsigned char* hash, unsigned char* buf, uint32_t size);
 
 #endif
