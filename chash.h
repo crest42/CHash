@@ -8,6 +8,7 @@
 
 struct item {
   unsigned char hash[HASH_DIGEST_SIZE];
+  uint32_t block;
   uint32_t flags;
   uint32_t offset;
   uint32_t size;
@@ -36,6 +37,7 @@ typedef int (*chash_frontend_get)(uint32_t,
 struct chash_backend {
     chash_backend_put put;
     chash_backend_get get;
+    chord_periodic_hook backend_periodic_hook;
     void *data;
 };
 
@@ -44,6 +46,7 @@ struct chash_frontend {
     chash_frontend_get get;
     chord_callback put_handler;
     chord_callback get_handler;
+    chord_periodic_hook frontend_periodic_hook;
     void* data;
 };
 

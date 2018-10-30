@@ -1,12 +1,14 @@
 #include "../chash.h"
 #include "chash_frontend_mirror.h"
 #include <stdio.h>
+
 int chash_mirror_put(uint32_t key_size, unsigned char *key, uint32_t offset, uint32_t data_size, unsigned char *data) {
   struct item item;
   struct node target;
   item.size = data_size;
   item.offset = offset;
   item.flags = 0;
+  item.block = *((uint32_t *)key);
   hash(item.hash, key, key_size, HASH_DIGEST_SIZE);
   find_successor(
     get_own_node(), &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));

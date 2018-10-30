@@ -42,6 +42,17 @@ static int chash_frontend_default_get(uint32_t key_size,unsigned char *key, uint
     return CHASH_OK;
 }
 
+static int chash_periodic(void *data) {
+  (void)data;
+  if(backend.backend_periodic_hook) {
+    backend.backend_periodic_hook(data);
+  }
+  if(frontend.frontend_periodic_hook) {
+    frontend.frontend_periodic_hook(data);
+  }
+  return CHASH_OK;
+}
+
 int
 init_chash(struct chash_backend *b,struct chash_frontend *f)
 {
@@ -65,6 +76,8 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
     cc->get_handler = frontend.get_handler;
   }
 
+  struct hooks *h = get_hooks();
+  h->periodic_hook = chash_periodic;
   return CHORD_OK;
 }
 
@@ -186,6 +199,7 @@ put(unsigned char* data, size_t size)
   item.size = size;
   item.offset = 0;
   item.flags = 0;
+  item.block = 0;
   hash(item.hash, data, item.size, HASH_DIGEST_SIZE);
   find_successor(
     get_own_node(), &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
