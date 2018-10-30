@@ -15,10 +15,10 @@ int chash_mirror_put(uint32_t key_size, unsigned char *key, uint32_t offset, uin
   nodeid_t first = target.id;
   int i = 0;
   do {
-    printf("put item with id %d on node %d\n",get_mod_of_hash(item.hash, CHORD_RING_SIZE),target.id);
+    //printf("put item with id %d on node %d\n",get_mod_of_hash(item.hash, CHORD_RING_SIZE),target.id);
     put_raw(data, &item, &target);
     find_successor(get_own_node(), &target, target.id);
-    printf("next: %d\n",target.id);
+    //printf("next: %d\n",target.id);
     i++;
   } while (first != target.id && i != REPLICAS);
 
@@ -26,7 +26,7 @@ int chash_mirror_put(uint32_t key_size, unsigned char *key, uint32_t offset, uin
 }
 
 int chash_mirror_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, unsigned char *buf) {
-  printf("read block %d with buf size %d\n",*((uint32_t *)key),buf_size);
+  //printf("read block %d with buf size %d\n",*((uint32_t *)key),buf_size);
   unsigned char out[HASH_DIGEST_SIZE];
   hash(out, key, key_size, HASH_DIGEST_SIZE);
   return get_raw(out, buf, buf_size);

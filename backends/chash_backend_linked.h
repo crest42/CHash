@@ -15,4 +15,11 @@ int chash_linked_list_put(struct item *item, unsigned char *data);
 int chash_linked_list_get(unsigned char *hash, nodeid_t *id, uint32_t *size, unsigned char **data);
 
 int chash_linked_list_maint(void *data);
+
+int handle_sync(chord_msg_t type,
+                unsigned char *data,
+                nodeid_t src,
+                int sock,
+                struct sockaddr* src_addr,
+                size_t src_addr_size);
 #endif //_LIBCHASH_STORE_LINKED_H

@@ -78,6 +78,7 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
 
   struct hooks *h = get_hooks();
   h->periodic_hook = chash_periodic;
+  cc->sync_handler = backend.sync_handler;
   return CHORD_OK;
 }
 
@@ -235,4 +236,23 @@ get(unsigned char* buf,uint32_t size)
   hash(out, (unsigned char *)&buf, sizeof(int), HASH_DIGEST_SIZE);
   DEBUG(INFO, "Get data for id %d\n", id);
   return get_raw(out,buf,size);
+}
+
+int sync_node(unsigned char *buf,uint32_t size,struct node *target) {
+  unsigned char msg[MAX_MSG_SIZE];
+  marshall_msg(MSG_TYPE_SYNC,target->id,sizeof(uint32_t),(unsigned char *)&size,msg);
+  add_msg_cont(buf,msg,size,sizeof(uint32_t)+CHORD_HEADER_SIZE);
+  chord_msg_t type = chord_send_block_and_wait(
+    target, msg, sizeof(msg), MSG_TYPE_SYNC_REQ_RESP, msg, size+sizeof(uint32_t));
+  if (type != MSG_TYPE_GET_RESP) {
+    return CHORD_ERR;
+  } else {
+    uint32_t req_nr = *((uint32_t *)msg);
+    uint32_t offset = sizeof(uint32_t);
+    for(uint32_t i = 0;i<req_nr;i++) {
+      printf("partner requested id %d -> %d\n",*((nodeid_t *)(msg+offset)),*((nodeid_t *)(msg+offset+sizeof(nodeid_t))));
+      offset += 2*sizeof(nodeid_t);
+    }
+  }
+  return CHORD_OK;
 }

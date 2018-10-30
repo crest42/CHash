@@ -37,6 +37,7 @@ typedef int (*chash_frontend_get)(uint32_t,
 struct chash_backend {
     chash_backend_put put;
     chash_backend_get get;
+    chord_callback sync_handler;
     chord_periodic_hook backend_periodic_hook;
     void *data;
 };
@@ -79,5 +80,7 @@ put_raw(unsigned char* data,
         struct node *target);
 int
 get_raw(unsigned char* hash, unsigned char* buf, uint32_t size);
+
+int sync_node(unsigned char *buf,uint32_t size,struct node *target);
 
 #endif
