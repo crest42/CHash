@@ -19,27 +19,29 @@ get_last_key(void)
 
 
 static int remove_key(struct key *key) {
-  struct key *search_key, *last_key = NULL, *tmp;
-  struct key **first_key = get_first_key();
+  struct key *search_key, *prev_key = NULL;
+  struct key **first_key = get_first_key(), **last_key = get_last_key();
   for (search_key = *first_key; search_key != NULL;
        search_key = search_key->next) {
     if (memcmp(key->hash,search_key->hash,HASH_DIGEST_SIZE) == 0) {
-      if(!last_key) {
-        tmp = *first_key;
+      if(!prev_key) {
         *first_key = search_key->next;
-        free(tmp);
+        free(search_key);
         break;
       } else {
-        tmp = search_key;
-        last_key->next = search_key->next;
-        free(tmp);
+        if(*last_key == search_key) {
+          *last_key = prev_key;
+        }
+        prev_key->next = search_key->next;
+        free(search_key);
         break;
       }
     }
-    last_key = search_key;
+    prev_key = search_key;
   }
   return CHASH_OK;
 }
+
 void dump(unsigned char *data,uint32_t size) {
     for(uint32_t i = 0;i<size;i++) {
         printf("%02x",data[i]);
@@ -66,14 +68,18 @@ static struct key *add_key(struct key *k, unsigned char *d) {
     *first_key = malloc(sizeof(struct key));
     *last_key = *first_key;
   } else {
-    (*last_key)->next = malloc(sizeof(struct key));
-    *last_key = (*last_key)->next;
+    assert(!(*last_key)->next);
+    ((*last_key)->next) = malloc(sizeof(struct key));
+
+    struct key *tmp = (*last_key)->next;
+    *last_key = tmp;
   }
   struct key* new_key = *last_key;
   memcpy(new_key, k, sizeof(struct key));
   new_key->next = NULL;
   new_key->data = malloc(new_key->size);
   memcpy(new_key->data, d, new_key->size);
+
   return new_key;
 }
 
@@ -158,6 +164,7 @@ static int maint_global(void) {
       }
     }
     if (!owns) {
+      DEBUG(INFO, "Do not own key %d reinsert!\n", key->id);
       frontend.put(
         sizeof(uint32_t), (unsigned char*)&key->block, 0, key->size, key->data);
       remove_key(key);
@@ -173,7 +180,7 @@ static void add_interval(struct key_range *r,unsigned char *buf, uint32_t *offse
 
 static int maint_sync(unsigned char *buf, uint32_t size) {
   struct node *successorlist = get_successorlist();
-  for(int i = 0;i<SUCCESSORLIST_SIZE;i++) {
+  for(int i = 0;i<REPLICAS-1;i++) {
     if(successorlist[i].id == get_own_node()->id) {
       break;
     }
@@ -211,9 +218,7 @@ static int maint_local(void) {
   if(r.start != 0 && r.end != 0) {
     add_interval(&r,buf,&offset);
   }
-  for(uint32_t i = 0;i<offset;i+=(sizeof(nodeid_t)*2)) {
-    //printf("range %d is from %d to %d\n",i,*((nodeid_t *)(&buf[i])),*((nodeid_t *)(&buf[i+sizeof(nodeid_t)])));
-  }
+
   if(offset > 0) {
     maint_sync(buf,offset);
   }
@@ -222,9 +227,12 @@ static int maint_local(void) {
 
 int chash_linked_list_maint(void *data) {
   (void)data;
-  int ret = maint_global();
+  //TODO: Error handling
+  DEBUG(INFO, "Start maint_global\n");
+  maint_global();
+  DEBUG(INFO, "Start maint_local\n");
   maint_local();
-  return ret;
+  return CHASH_OK;
 }
 
 
@@ -243,10 +251,8 @@ int handle_sync_fetch(chord_msg_t type,
   (void)src_addr_size;
   (void)size;
   struct key* k = (struct key*)data;
-  printf("push key with size %d\n",k->size);
   if(!get_key(k->id)) {
     add_key(k, data + sizeof(struct key));
-    printf("key added\n");
   }
   return CHASH_OK;
 }
@@ -286,8 +292,9 @@ int handle_sync(chord_msg_t type,
     }
   }
   if(req.start != 0 && req.end != 0) {
-    add_interval(&req,buf,&offset);
+    add_interval(&req, buf, &offset);
   }
+  DEBUG(INFO, "Req %d keys to sync\n", offset / (2 * sizeof(uint32_t)));
   marshal_msg(MSG_TYPE_SYNC_REQ_FETCH, src, offset, buf, buf);
   return chord_send_nonblock_sock(
     sock, buf, CHORD_HEADER_SIZE + offset, src_addr, src_addr_size);
