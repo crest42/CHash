@@ -38,6 +38,7 @@ struct chash_backend {
     chash_backend_put put;
     chash_backend_get get;
     chord_callback sync_handler;
+    chord_callback sync_fetch_handler;
     chord_periodic_hook backend_periodic_hook;
     void *data;
 };
@@ -52,6 +53,14 @@ struct chash_frontend {
 };
 
 
+struct key_range {
+  nodeid_t start;
+  nodeid_t end;
+};
+
+int
+push_key(nodeid_t id, struct node *target);
+
 int
 put(unsigned char* data, size_t size);
 
@@ -63,14 +72,16 @@ handle_get(chord_msg_t type,unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
-           size_t src_addr_size);
+           size_t src_addr_size,
+           size_t msg_size);
 int
 handle_put(chord_msg_t type,
            unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
-           size_t src_addr_size);
+           size_t src_addr_size,
+           size_t msg_size);
 int
 init_chash(struct chash_backend *b,struct chash_frontend *f);
 

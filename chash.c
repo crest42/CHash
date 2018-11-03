@@ -79,6 +79,7 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
   struct hooks *h = get_hooks();
   h->periodic_hook = chash_periodic;
   cc->sync_handler = backend.sync_handler;
+  cc->sync_fetch_handler = backend.sync_fetch_handler;
   return CHORD_OK;
 }
 
@@ -90,19 +91,18 @@ send_chunk(unsigned char* buf,
   assert((item->size + HASH_DIGEST_SIZE + sizeof(struct item)) < MAX_MSG_SIZE);
   unsigned char msg[MAX_MSG_SIZE];
   memset(msg,0,sizeof(msg));
-  DEBUG(INFO, "Send %d bytes (%p) to node %d\n", size, buf, target->id);
+  DEBUG(INFO, "Send %d bytes (%p) to node %d\n", item->size, buf, target->id);
   //printf( "Send %d bytes (%p) with offset %d to node %d\n", size, buf,offset, target->id);
 
   size_t s = sizeof(struct item);
-  marshall_msg(
+  marshal_msg(
     MSG_TYPE_PUT, target->id, s, (unsigned char*)item, msg);
   s += CHORD_HEADER_SIZE;
   add_msg_cont(buf,msg,item->size,s);
   s += item->size;
 
   chord_msg_t type = chord_send_block_and_wait(
-    target, msg, s, MSG_TYPE_PUT_ACK, NULL, 0);
-  DEBUG(INFO, "Got message with type %d as response\n", (type));
+    target, msg, s, MSG_TYPE_PUT_ACK, NULL, 0,NULL);
   if (type == MSG_TYPE_CHORD_ERR) {
     return CHORD_ERR;
   }
@@ -114,9 +114,11 @@ handle_get(chord_msg_t type,unsigned char* data,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
-           size_t src_addr_size)
+           size_t src_addr_size,
+           size_t msg_size)
 {
   assert(type == MSG_TYPE_GET);
+  assert(msg_size > 0);
   DEBUG(INFO, "HANDLE GET CALLED\n");
   unsigned char msg[MAX_MSG_SIZE];
   size_t        size;
@@ -130,7 +132,7 @@ handle_get(chord_msg_t type,unsigned char* data,
     msg_type = MSG_TYPE_GET_EFAIL;
   }
 //printf("ret size %d\n",size);
-  marshall_msg(msg_type, src, size, content, msg);
+  marshal_msg(msg_type, src, size, content, msg);
   return chord_send_nonblock_sock(
     sock, msg, CHORD_HEADER_SIZE + size, src_addr, src_addr_size);
 }
@@ -141,12 +143,13 @@ handle_put(chord_msg_t type,
            nodeid_t src,
            int sock,
            struct sockaddr* src_addr,
-           size_t src_addr_size)
+           size_t src_addr_size,
+           size_t msg_size)
 {
   assert(type == MSG_TYPE_PUT);
+  assert(msg_size > 0);
   DEBUG(INFO, "HANDLE PUT CALLED. Send answer\n");
   //printf( "HANDLE PUT CALLED. Send answer\n");
-
   struct item* item = (struct item*)data;
   unsigned char *cont = data + sizeof(struct item);
   chord_msg_t msg_type = MSG_TYPE_PUT_ACK;
@@ -154,7 +157,7 @@ handle_put(chord_msg_t type,
     msg_type = MSG_TYPE_PUT_EFAIL;
   }
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(msg_type,
+  marshal_msg(msg_type,
                src,
                sizeof(nodeid_t),
                (unsigned char*)&(get_own_node()->id),
@@ -169,7 +172,7 @@ put_raw(unsigned char* data, struct item *item, struct node *target)
   assert(item);
   assert(target);
   assert(target->id > 0);
-  DEBUG(INFO, "Put %d bytes data into %d->%d\n", size, id, target->id);
+  DEBUG(INFO, "Put %d bytes data into %d->%d\n", item->size, get_mod_of_hash(item->hash,CHORD_RING_SIZE), target->id);
   //TODO: Remove chunk size. Should be handled in calling function
   uint32_t size = item->size;
   for (size_t i = 0; i < size; i = i + CHASH_CHUNK_SIZE) {
@@ -186,7 +189,7 @@ put_raw(unsigned char* data, struct item *item, struct node *target)
       DEBUG(ERROR,
             "Error in send chunk of size %d to target node %d\n",
             item->size,
-            target.id);
+            target->id);
     }
   }
   return CHASH_OK;
@@ -216,10 +219,10 @@ get_raw(unsigned char *hash, unsigned char* buf,uint32_t size){
   struct node target;
   struct node *mynode = get_own_node();
   find_successor(mynode, &target, id);
-  marshall_msg(
+  marshal_msg(
     MSG_TYPE_GET, target.id, HASH_DIGEST_SIZE, hash, msg);
   chord_msg_t type = chord_send_block_and_wait(
-    &target, msg, sizeof(msg), MSG_TYPE_GET_RESP, buf, size);
+    &target, msg, sizeof(msg), MSG_TYPE_GET_RESP, buf, size,NULL);
   if (type != MSG_TYPE_GET_RESP) {
     return CHORD_ERR;
   }
@@ -234,24 +237,26 @@ get(unsigned char* buf,uint32_t size)
   }
   unsigned char out[HASH_DIGEST_SIZE];
   hash(out, (unsigned char *)&buf, sizeof(int), HASH_DIGEST_SIZE);
-  DEBUG(INFO, "Get data for id %d\n", id);
+  DEBUG(INFO, "Get data for id %d\n", get_mod_of_hash(out,CHORD_RING_SIZE));
   return get_raw(out,buf,size);
 }
 
 int sync_node(unsigned char *buf,uint32_t size,struct node *target) {
   unsigned char msg[MAX_MSG_SIZE];
-  marshall_msg(MSG_TYPE_SYNC,target->id,sizeof(uint32_t),(unsigned char *)&size,msg);
-  add_msg_cont(buf,msg,size,sizeof(uint32_t)+CHORD_HEADER_SIZE);
-  chord_msg_t type = chord_send_block_and_wait(
-    target, msg, sizeof(msg), MSG_TYPE_SYNC_REQ_RESP, msg, size+sizeof(uint32_t));
-  if (type != MSG_TYPE_GET_RESP) {
-    return CHORD_ERR;
-  } else {
-    uint32_t req_nr = *((uint32_t *)msg);
-    uint32_t offset = sizeof(uint32_t);
-    for(uint32_t i = 0;i<req_nr;i++) {
-      printf("partner requested id %d -> %d\n",*((nodeid_t *)(msg+offset)),*((nodeid_t *)(msg+offset+sizeof(nodeid_t))));
-      offset += 2*sizeof(nodeid_t);
+  marshal_msg(
+    MSG_TYPE_SYNC, target->id, size, buf, msg);
+  size_t resp_size = 0;
+  chord_send_block_and_wait(target,
+                            msg,
+                            sizeof(msg),
+                            MSG_TYPE_SYNC_REQ_FETCH,
+                            msg,
+                            sizeof(msg),
+                            &resp_size);
+  for (uint32_t i = 0; i < resp_size / sizeof(struct key_range);i++) {
+    struct key_range* r = ((struct key_range*)(msg)) + i;
+    for (uint32_t i = r->start; i != (r->end+1);i = (i+1)%CHORD_RING_SIZE) {
+      push_key(i,target);
     }
   }
   return CHORD_OK;
