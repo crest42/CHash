@@ -126,7 +126,7 @@ handle_get(chord_msg_t type,
   unsigned char *content, *hash = data;
   nodeid_t      id;
 
-  backend.get(hash,&id,&size,&content);
+  backend.get(hash,&id,(uint32_t*)&size,&content);
   chord_msg_t msg_type = MSG_TYPE_GET_RESP;
   if(size == 0 || content == NULL) {
     assert(size == 0 && content == NULL);
