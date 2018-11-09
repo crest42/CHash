@@ -110,13 +110,14 @@ send_chunk(unsigned char* buf,
 }
 
 int
-handle_get(chord_msg_t type,unsigned char* data,
-           nodeid_t src,
-           int sock,
-           struct sockaddr* src_addr,
-           size_t src_addr_size,
-           size_t msg_size)
+handle_get(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size)
 {
+  (void)type;
+  (void)msg_size;
   assert(type == MSG_TYPE_GET);
   assert(msg_size > 0);
   DEBUG(INFO, "HANDLE GET CALLED\n");
@@ -133,19 +134,18 @@ handle_get(chord_msg_t type,unsigned char* data,
   }
 //printf("ret size %d\n",size);
   marshal_msg(msg_type, src, size, content, msg);
-  return chord_send_nonblock_sock(
-    sock, msg, CHORD_HEADER_SIZE + size, src_addr, src_addr_size);
+  return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + size, s);
 }
 
 int
 handle_put(chord_msg_t type,
-           unsigned char* data,
-           nodeid_t src,
-           int sock,
-           struct sockaddr* src_addr,
-           size_t src_addr_size,
-           size_t msg_size)
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size)
 {
+    (void)type;
+  (void)msg_size;
   assert(type == MSG_TYPE_PUT);
   assert(msg_size > 0);
   DEBUG(INFO, "HANDLE PUT CALLED. Send answer\n");
@@ -162,8 +162,7 @@ handle_put(chord_msg_t type,
                sizeof(nodeid_t),
                (unsigned char*)&(get_own_node()->id),
                msg);
-  return chord_send_nonblock_sock(
-    sock, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), src_addr, src_addr_size);
+  return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t),s);
 }
 
 int

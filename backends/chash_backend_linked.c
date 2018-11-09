@@ -49,7 +49,6 @@ void dump(unsigned char *data,uint32_t size) {
     printf("\n");
 }
 
-
 static struct key *get_key(nodeid_t id) {
   struct key* key = NULL;
   struct key** first_key = get_first_key();
@@ -79,7 +78,6 @@ static struct key *add_key(struct key *k, unsigned char *d) {
   new_key->next = NULL;
   new_key->data = malloc(new_key->size);
   memcpy(new_key->data, d, new_key->size);
-
   return new_key;
 }
 
@@ -200,7 +198,7 @@ static int maint_local(void) {
   uint32_t offset = 0;
   for (key = *first_key; key != NULL;
        key = key->next) {
-    if(in_interval(self->predecessor,self,key->id)) {
+    if(in_interval(self->additional->predecessor,self,key->id)) {
       if(r.start == 0) {
         r.start = key->id;
         r.end   = key->id;
@@ -218,7 +216,9 @@ static int maint_local(void) {
   if(r.start != 0 && r.end != 0) {
     add_interval(&r,buf,&offset);
   }
-
+  /*for(uint32_t i = 0;i<offset;i+=(sizeof(nodeid_t)*2)) {
+    printf("range %d is from %d to %d\n",i,*((nodeid_t *)(&buf[i])),*((nodeid_t *)(&buf[i+sizeof(nodeid_t)])));
+  }*/
   if(offset > 0) {
     maint_sync(buf,offset);
   }
@@ -237,19 +237,15 @@ int chash_linked_list_maint(void *data) {
 
 
 int handle_sync_fetch(chord_msg_t type,
-                unsigned char *data,
-                nodeid_t src,
-                int sock,
-                struct sockaddr* src_addr,
-                size_t src_addr_size,
-                size_t size) {
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size){
   assert(type == MSG_TYPE_SYNC_REQ_FETCH);
-  assert(size > 0);
+  assert(msg_size > 0);
+  (void)type;
   (void)src;
-  (void)sock;
-  (void)src_addr;
-  (void)src_addr_size;
-  (void)size;
+  (void)s;
   struct key* k = (struct key*)data;
   if(!get_key(k->id)) {
     add_key(k, data + sizeof(struct key));
@@ -258,20 +254,15 @@ int handle_sync_fetch(chord_msg_t type,
 }
 
 int handle_sync(chord_msg_t type,
-                unsigned char *data,
-                nodeid_t src,
-                int sock,
-                struct sockaddr* src_addr,
-                size_t src_addr_size,
-                size_t size) {
-  (void)sock;
-  (void)src_addr;
-  (void)src_addr_size;
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size) {
   assert(type == MSG_TYPE_SYNC);
   unsigned char buf[MAX_MSG_SIZE];
   uint32_t offset = 0;
   struct key_range req = {.start = 0, .end = 0};
-  for (uint32_t i = 0; i < size / sizeof(struct key_range); i++) {
+  for (uint32_t i = 0; i < msg_size / sizeof(struct key_range); i++) {
     struct key_range *r  = (struct key_range *)(data + (i * sizeof(struct key_range)));
     assert(r->end - r->start <= CHORD_RING_SIZE);
     for(;r->start <= r->end;r->start = ((r->start+1)%CHORD_RING_SIZE)) {
@@ -296,8 +287,7 @@ int handle_sync(chord_msg_t type,
   }
   DEBUG(INFO, "Req %d keys to sync\n", offset / (2 * sizeof(uint32_t)));
   marshal_msg(MSG_TYPE_SYNC_REQ_FETCH, src, offset, buf, buf);
-  return chord_send_nonblock_sock(
-    sock, buf, CHORD_HEADER_SIZE + offset, src_addr, src_addr_size);
+  return chord_send_nonblock_sock(buf, CHORD_HEADER_SIZE + offset, s);
 }
 
 int push_key(uint32_t id, struct node *target) {

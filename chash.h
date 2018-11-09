@@ -68,20 +68,17 @@ int
 get(unsigned char* buf,uint32_t size);
 
 int
-handle_get(chord_msg_t type,unsigned char* data,
-           nodeid_t src,
-           int sock,
-           struct sockaddr* src_addr,
-           size_t src_addr_size,
-           size_t msg_size);
+handle_get(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size);
 int
 handle_put(chord_msg_t type,
-           unsigned char* data,
-           nodeid_t src,
-           int sock,
-           struct sockaddr* src_addr,
-           size_t src_addr_size,
-           size_t msg_size);
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size);
 int
 init_chash(struct chash_backend *b,struct chash_frontend *f);
 
