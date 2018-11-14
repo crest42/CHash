@@ -40,7 +40,7 @@ struct chash_backend {
     chord_callback sync_handler;
     chord_callback sync_fetch_handler;
     chord_periodic_hook backend_periodic_hook;
-    void *data;
+    void* periodic_data;
 };
 
 struct chash_frontend {

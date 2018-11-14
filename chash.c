@@ -60,7 +60,7 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
   if(!b) {
     backend.put = chash_backend_default_put;
     backend.get = chash_backend_default_get;
-    backend.data = NULL;
+    backend.periodic_data = NULL;
   } else {
     backend = *b;
   }

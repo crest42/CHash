@@ -226,7 +226,13 @@ static int maint_local(void) {
 }
 
 int chash_linked_list_maint(void *data) {
-  (void)data;
+  if(data) {
+    struct aggregate *stats = get_stats();
+    printf("s: %d sec: %d\n",stats->available,stats->available/128);
+    *((uint32_t *)data) = (int)(stats->available / 128);
+  } else {
+    printf("no data\n");
+  }
   //TODO: Error handling
   DEBUG(INFO, "Start maint_global\n");
   maint_global();
