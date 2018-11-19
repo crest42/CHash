@@ -3,6 +3,8 @@
 #include "chash_backend_linked.h"
 extern struct chash_frontend frontend;
 
+uint32_t stable = 0;
+uint32_t old = 0;
 struct key* first_key;
 struct key* last_key;
 struct key**
@@ -227,9 +229,21 @@ static int maint_local(void) {
 
 int chash_linked_list_maint(void *data) {
   if(data) {
-    struct aggregate *stats = get_stats();
-    printf("s: %d sec: %d\n",stats->available,stats->available/128);
-    *((uint32_t *)data) = (int)(stats->available / 128);
+    if(stable >= 3) {
+      struct aggregate *stats = get_stats();
+      //printf("s: %d sec: %d\n",stats->available,stats->available/128);
+      *((uint32_t *)data) = (int)(stats->available / 128);
+    } else {
+      uint32_t tmp = *((uint32_t*)data);
+      if(tmp == old) {
+        stable++;
+      } else {
+        old = tmp;
+      }
+    }
+    if(stable >= UINT_MAX) {
+      stable = 3;
+    }
   } else {
     printf("no data\n");
   }
