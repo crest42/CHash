@@ -2,7 +2,23 @@
 #include "chash_frontend_mirror.h"
 #include <stdio.h>
 
-int chash_mirror_put(uint32_t key_size, unsigned char *key, uint32_t offset, uint32_t data_size, unsigned char *data) {
+extern int
+remove_key(struct key* key);
+extern struct key*
+get_key(nodeid_t id);
+
+extern struct key*
+add_key(struct key* k, unsigned char* d);
+
+uint32_t stable = 0, old = 0;
+
+int
+chash_mirror_put(uint32_t key_size,
+                 unsigned char* key,
+                 uint32_t offset,
+                 uint32_t data_size,
+                 unsigned char* data)
+{
   struct item item;
   struct node target;
   item.size = data_size;
@@ -29,5 +45,187 @@ int chash_mirror_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, u
   //printf("read block %d with buf size %d\n",*((uint32_t *)key),buf_size);
   unsigned char out[HASH_DIGEST_SIZE];
   hash(out, key, key_size, HASH_DIGEST_SIZE);
-  return get_raw(out, buf, buf_size);
+    unsigned char msg[CHORD_HEADER_SIZE + HASH_DIGEST_SIZE];
+  nodeid_t id = get_mod_of_hash(out,CHORD_RING_SIZE);
+  struct node target;
+  struct node *mynode = get_own_node();
+  chord_msg_t type = -1;
+  int i = 0;
+  do {
+    find_successor(mynode, &target, id);
+    printf("look for %d at %d\n",get_mod_of_hash(out,CHORD_RING_SIZE),target.id);
+    marshal_msg(
+      MSG_TYPE_GET, target.id, HASH_DIGEST_SIZE, out, msg);
+    type = chord_send_block_and_wait(
+      &target, msg, sizeof(msg), MSG_TYPE_GET_RESP, buf, buf_size,NULL);
+    id = target.id;
+    i++;
+  } while (type == MSG_TYPE_GET_EFAIL && i < REPLICAS);
+  return CHORD_OK;
+}
+
+
+static int maint_global(void) {
+  struct key* key = NULL;
+  struct key** first_key = get_first_key();
+  struct node successor;
+  nodeid_t successorlist[SUCCESSORLIST_SIZE];
+  for (key = *first_key; key != NULL; key = key->next) {
+    find_successor(get_own_node(), &successor, key->id);
+    bool owns = false;
+    if (successor.id == get_own_node()->id) {
+      owns = true;
+    } else {
+      get_successorlist_id(&successor, successorlist);
+      for (int i = 0; i < REPLICAS - 1; i++) {
+        if (successorlist[i] == get_own_node()->id) {
+          owns = true;
+          break;
+        }
+      }
+    }
+    if (!owns) {
+      DEBUG(INFO, "Do not own key %d reinsert!\n", key->id);
+      chash_mirror_put(
+        sizeof(uint32_t), (unsigned char*)&key->block, 0, key->size, key->data);
+      remove_key(key);
+    }
+  }
+  return CHASH_OK;
+}
+
+static void add_interval(struct key_range *r,unsigned char *buf, uint32_t *offset) {
+  memcpy(buf+*offset,r,sizeof(struct key_range));
+  *offset += sizeof(struct key_range);
+}
+
+static int maint_sync(unsigned char *buf, uint32_t size) {
+  struct node *successorlist = get_successorlist();
+  for(int i = 0;i<REPLICAS-1;i++) {
+    if(successorlist[i].id == get_own_node()->id) {
+      break;
+    }
+    sync_node(buf,size,&successorlist[i]);
+  }
+  return CHORD_OK;
+}
+
+static int maint_local(void) {
+  //TODO: Do not assume that all keys fit into a single message. Atm buf is floor(1004/8) = 125 keys
+  struct key* key = NULL;
+  struct key** first_key = get_first_key();
+  struct node *self = get_own_node();
+  unsigned char buf[MAX_MSG_SIZE-CHORD_HEADER_SIZE];
+  memset(buf,0,sizeof(buf));
+  struct key_range r = {.start = 0, .end = 0};
+  uint32_t offset = 0;
+  for (key = *first_key; key != NULL;
+       key = key->next) {
+    if(in_interval(self->additional->predecessor,self,key->id)) {
+      if(r.start == 0) {
+        r.start = key->id;
+        r.end   = key->id;
+      } else {
+        if(key->id == (r.start+1)%CHORD_RING_SIZE) {
+          r.end = key->id;
+        } else {
+          add_interval(&r,buf,&offset);
+          r.start = key->id;
+          r.end = key->id;
+        }
+      }
+    }
+  }
+  if(r.start != 0 && r.end != 0) {
+    add_interval(&r,buf,&offset);
+  }
+  /*for(uint32_t i = 0;i<offset;i+=(sizeof(nodeid_t)*2)) {
+    printf("range %d is from %d to %d\n",i,*((nodeid_t *)(&buf[i])),*((nodeid_t *)(&buf[i+sizeof(nodeid_t)])));
+  }*/
+  if(offset > 0) {
+    maint_sync(buf,offset);
+  }
+  return CHASH_OK;
+}
+
+int handle_sync_fetch(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size){
+  assert(type == MSG_TYPE_SYNC_REQ_FETCH);
+  assert(msg_size > 0);
+  (void)type;
+  (void)src;
+  (void)s;
+  struct key* k = (struct key*)data;
+  if(!get_key(k->id)) {
+    add_key(k, data + sizeof(struct key));
+  }
+  return CHASH_OK;
+}
+
+int handle_sync(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size) {
+  assert(type == MSG_TYPE_SYNC);
+  unsigned char buf[MAX_MSG_SIZE];
+  uint32_t offset = 0;
+  struct key_range req = {.start = 0, .end = 0};
+  for (uint32_t i = 0; i < msg_size / sizeof(struct key_range); i++) {
+    struct key_range *r  = (struct key_range *)(data + (i * sizeof(struct key_range)));
+    assert(r->end - r->start <= CHORD_RING_SIZE);
+    for(;r->start <= r->end;r->start = ((r->start+1)%CHORD_RING_SIZE)) {
+      if(!get_key(r->start)) {
+        if(req.start == 0) {
+          req.start = r->start;
+          req.end   = r->end;
+        } else {
+          if(r->start == (req.start+1)) {
+            req.end = r->start;
+          } else {
+          add_interval(&req,buf,&offset);
+          req.start = r->start;
+          req.end   = r->end;
+          }
+        }
+      }
+    }
+  }
+  if(req.start != 0 && req.end != 0) {
+    add_interval(&req, buf, &offset);
+  }
+  DEBUG(INFO, "Req %d keys to sync\n", offset / (2 * sizeof(uint32_t)));
+  marshal_msg(MSG_TYPE_SYNC_REQ_FETCH, src, offset, buf, buf);
+  return chord_send_nonblock_sock(buf, CHORD_HEADER_SIZE + offset, s);
+}
+
+int chash_mirror_periodic(void *data) {
+  if(data) {
+    if(stable >= 3) {
+      struct aggregate *stats = get_stats();
+      //printf("s: %d sec: %d\n",stats->available,stats->available/128);
+      *((uint32_t *)data) = (int)(stats->available / 128);
+    } else {
+      uint32_t tmp = *((uint32_t*)data);
+      if(tmp == old) {
+        stable++;
+      } else {
+        old = tmp;
+      }
+    }
+    if(stable >= UINT_MAX) {
+      stable = 3;
+    }
+  } else {
+    printf("no data\n");
+  }
+  //TODO: Error handling
+  DEBUG(INFO, "Start maint_global\n");
+  maint_global();
+  DEBUG(INFO, "Start maint_local\n");
+  maint_local();
+  return CHASH_OK;
 }

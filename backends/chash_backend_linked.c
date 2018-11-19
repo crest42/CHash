@@ -3,8 +3,6 @@
 #include "chash_backend_linked.h"
 extern struct chash_frontend frontend;
 
-uint32_t stable = 0;
-uint32_t old = 0;
 struct key* first_key;
 struct key* last_key;
 struct key**
@@ -20,7 +18,7 @@ get_last_key(void)
 }
 
 
-static int remove_key(struct key *key) {
+int remove_key(struct key *key) {
   struct key *search_key, *prev_key = NULL;
   struct key **first_key = get_first_key(), **last_key = get_last_key();
   for (search_key = *first_key; search_key != NULL;
@@ -51,7 +49,7 @@ void dump(unsigned char *data,uint32_t size) {
     printf("\n");
 }
 
-static struct key *get_key(nodeid_t id) {
+struct key *get_key(nodeid_t id) {
   struct key* key = NULL;
   struct key** first_key = get_first_key();
   for (key = *first_key; key != NULL;
@@ -63,7 +61,7 @@ static struct key *get_key(nodeid_t id) {
   return NULL;
 }
 
-static struct key *add_key(struct key *k, unsigned char *d) {
+struct key *add_key(struct key *k, unsigned char *d) {
   struct key **first_key = get_first_key(), **last_key = get_last_key();
   if (*first_key == NULL) {
     *first_key = malloc(sizeof(struct key));
@@ -143,172 +141,6 @@ static nodeid_t get_last_node(nodeid_t *id, int size) {
   }
   return id[size];
 }*/
-
-static int maint_global(void) {
-  struct key* key = NULL;
-  struct key** first_key = get_first_key();
-  struct node successor;
-  nodeid_t successorlist[SUCCESSORLIST_SIZE];
-  for (key = *first_key; key != NULL; key = key->next) {
-    find_successor(get_own_node(), &successor, key->id);
-    bool owns = false;
-    if (successor.id == get_own_node()->id) {
-      owns = true;
-    } else {
-      get_successorlist_id(&successor, successorlist);
-      for (int i = 0; i < REPLICAS - 1; i++) {
-        if (successorlist[i] == get_own_node()->id) {
-          owns = true;
-          break;
-        }
-      }
-    }
-    if (!owns) {
-      DEBUG(INFO, "Do not own key %d reinsert!\n", key->id);
-      frontend.put(
-        sizeof(uint32_t), (unsigned char*)&key->block, 0, key->size, key->data);
-      remove_key(key);
-    }
-  }
-  return CHASH_OK;
-}
-
-static void add_interval(struct key_range *r,unsigned char *buf, uint32_t *offset) {
-  memcpy(buf+*offset,r,sizeof(struct key_range));
-  *offset += sizeof(struct key_range);
-}
-
-static int maint_sync(unsigned char *buf, uint32_t size) {
-  struct node *successorlist = get_successorlist();
-  for(int i = 0;i<REPLICAS-1;i++) {
-    if(successorlist[i].id == get_own_node()->id) {
-      break;
-    }
-    sync_node(buf,size,&successorlist[i]);
-  }
-  return CHORD_OK;
-}
-
-static int maint_local(void) {
-  //TODO: Do not assume that all keys fit into a single message. Atm buf is floor(1004/8) = 125 keys
-  struct key* key = NULL;
-  struct key** first_key = get_first_key();
-  struct node *self = get_own_node();
-  unsigned char buf[MAX_MSG_SIZE-CHORD_HEADER_SIZE];
-  memset(buf,0,sizeof(buf));
-  struct key_range r = {.start = 0, .end = 0};
-  uint32_t offset = 0;
-  for (key = *first_key; key != NULL;
-       key = key->next) {
-    if(in_interval(self->additional->predecessor,self,key->id)) {
-      if(r.start == 0) {
-        r.start = key->id;
-        r.end   = key->id;
-      } else {
-        if(key->id == (r.start+1)%CHORD_RING_SIZE) {
-          r.end = key->id;
-        } else {
-          add_interval(&r,buf,&offset);
-          r.start = key->id;
-          r.end = key->id;
-        }
-      }
-    }
-  }
-  if(r.start != 0 && r.end != 0) {
-    add_interval(&r,buf,&offset);
-  }
-  /*for(uint32_t i = 0;i<offset;i+=(sizeof(nodeid_t)*2)) {
-    printf("range %d is from %d to %d\n",i,*((nodeid_t *)(&buf[i])),*((nodeid_t *)(&buf[i+sizeof(nodeid_t)])));
-  }*/
-  if(offset > 0) {
-    maint_sync(buf,offset);
-  }
-  return CHASH_OK;
-}
-
-int chash_linked_list_maint(void *data) {
-  if(data) {
-    if(stable >= 3) {
-      struct aggregate *stats = get_stats();
-      //printf("s: %d sec: %d\n",stats->available,stats->available/128);
-      *((uint32_t *)data) = (int)(stats->available / 128);
-    } else {
-      uint32_t tmp = *((uint32_t*)data);
-      if(tmp == old) {
-        stable++;
-      } else {
-        old = tmp;
-      }
-    }
-    if(stable >= UINT_MAX) {
-      stable = 3;
-    }
-  } else {
-    printf("no data\n");
-  }
-  //TODO: Error handling
-  DEBUG(INFO, "Start maint_global\n");
-  maint_global();
-  DEBUG(INFO, "Start maint_local\n");
-  maint_local();
-  return CHASH_OK;
-}
-
-
-int handle_sync_fetch(chord_msg_t type,
-            unsigned char* data,
-            nodeid_t src,
-            struct socket_wrapper *s,
-            size_t msg_size){
-  assert(type == MSG_TYPE_SYNC_REQ_FETCH);
-  assert(msg_size > 0);
-  (void)type;
-  (void)src;
-  (void)s;
-  struct key* k = (struct key*)data;
-  if(!get_key(k->id)) {
-    add_key(k, data + sizeof(struct key));
-  }
-  return CHASH_OK;
-}
-
-int handle_sync(chord_msg_t type,
-            unsigned char* data,
-            nodeid_t src,
-            struct socket_wrapper *s,
-            size_t msg_size) {
-  assert(type == MSG_TYPE_SYNC);
-  unsigned char buf[MAX_MSG_SIZE];
-  uint32_t offset = 0;
-  struct key_range req = {.start = 0, .end = 0};
-  for (uint32_t i = 0; i < msg_size / sizeof(struct key_range); i++) {
-    struct key_range *r  = (struct key_range *)(data + (i * sizeof(struct key_range)));
-    assert(r->end - r->start <= CHORD_RING_SIZE);
-    for(;r->start <= r->end;r->start = ((r->start+1)%CHORD_RING_SIZE)) {
-      if(!get_key(r->start)) {
-        if(req.start == 0) {
-          req.start = r->start;
-          req.end   = r->end;
-        } else {
-          if(r->start == (req.start+1)) {
-            req.end = r->start;
-          } else {
-          add_interval(&req,buf,&offset);
-          req.start = r->start;
-          req.end   = r->end;
-          }
-        }
-      }
-    }
-  }
-  if(req.start != 0 && req.end != 0) {
-    add_interval(&req, buf, &offset);
-  }
-  DEBUG(INFO, "Req %d keys to sync\n", offset / (2 * sizeof(uint32_t)));
-  marshal_msg(MSG_TYPE_SYNC_REQ_FETCH, src, offset, buf, buf);
-  return chord_send_nonblock_sock(buf, CHORD_HEADER_SIZE + offset, s);
-}
 
 int push_key(uint32_t id, struct node *target) {
   struct key* k = get_key(id);

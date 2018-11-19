@@ -1,6 +1,5 @@
 #include "chash.h"
 #include "../chord/include/chord.h"
-#include "../chord/include/network.h"
 #include <assert.h>
 #include <errno.h>
 #include <sys/time.h>
@@ -69,17 +68,17 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
     frontend.get = chash_frontend_default_get;
     cc->put_handler = handle_put;
     cc->get_handler = handle_get;
-    frontend.data = NULL;
+    frontend.periodic_data = NULL;
   } else {
     frontend = *f;
     cc->put_handler = frontend.put_handler;
     cc->get_handler = frontend.get_handler;
   }
 
-  struct hooks *h = get_hooks();
-  h->periodic_hook = chash_periodic;
-  cc->sync_handler = backend.sync_handler;
-  cc->sync_fetch_handler = backend.sync_fetch_handler;
+  struct hooks *h        = get_hooks();
+  h->periodic_hook       = chash_periodic;
+  cc->sync_handler       = frontend.sync_handler;
+  cc->sync_fetch_handler = frontend.sync_fetch_handler;
   return CHORD_OK;
 }
 

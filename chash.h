@@ -1,6 +1,8 @@
 #ifndef _LIBCHASH_H
 #define _LIBCHASH_H
 #include "../chord/include/chord.h"
+#include "../chord/include/network.h"
+
 #include <stdint.h>
 #define CHASH_OK (0)
 #define CHASH_ERR (-1)
@@ -37,8 +39,6 @@ typedef int (*chash_frontend_get)(uint32_t,
 struct chash_backend {
     chash_backend_put put;
     chash_backend_get get;
-    chord_callback sync_handler;
-    chord_callback sync_fetch_handler;
     chord_periodic_hook backend_periodic_hook;
     void* periodic_data;
 };
@@ -48,8 +48,10 @@ struct chash_frontend {
     chash_frontend_get get;
     chord_callback put_handler;
     chord_callback get_handler;
+    chord_callback sync_handler;
+    chord_callback sync_fetch_handler;
     chord_periodic_hook frontend_periodic_hook;
-    void* data;
+    void* periodic_data;
 };
 
 
