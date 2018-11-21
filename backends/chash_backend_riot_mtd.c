@@ -1,6 +1,6 @@
-#include "../chash.h"
+#include "../include/chash.h"
+#include "../include/chash_backend.h"
 #include "../../chord/include/network.h"
-#include "chash_backend.h"
 #include "mtd.h"
 //#define CHASH_BACKEND_RIOT_MTD
 #ifdef CHASH_BACKEND_RIOT_MTD

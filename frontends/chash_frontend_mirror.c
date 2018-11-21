@@ -1,6 +1,6 @@
-#include "../chash.h"
-#include "chash_frontend_mirror.h"
-#include "../backends/chash_backend.h"
+#include "../include/chash.h"
+#include "../include/chash_frontend.h"
+#include "../include/chash_backend.h"
 #include <stdio.h>
 
 extern int
@@ -14,7 +14,7 @@ add_key(struct key* k, unsigned char* d);
 uint32_t stable = 0, old = 0;
 
 int
-chash_mirror_put(uint32_t key_size,
+chash_frontend_put(uint32_t key_size,
                  unsigned char* key,
                  uint32_t offset,
                  uint32_t data_size,
@@ -42,7 +42,7 @@ chash_mirror_put(uint32_t key_size,
   return CHASH_OK;
 }
 
-int chash_mirror_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, unsigned char *buf) {
+int chash_frontend_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, unsigned char *buf) {
   //printf("read block %d with buf size %d\n",*((uint32_t *)key),buf_size);
   unsigned char out[HASH_DIGEST_SIZE];
   hash(out, key, key_size, HASH_DIGEST_SIZE);
@@ -86,7 +86,7 @@ static int maint_global(void) {
     }
     if (!owns) {
       DEBUG(INFO, "Do not own key %d reinsert!\n", key->id);
-      chash_mirror_put(
+      chash_frontend_put(
         sizeof(uint32_t), (unsigned char*)&key->block, 0, key->size, key->data);
       remove_key(key);
     }
@@ -205,7 +205,7 @@ int handle_sync(chord_msg_t type,
   return chord_send_nonblock_sock(buf, CHORD_HEADER_SIZE + offset, s);
 }
 
-int chash_mirror_periodic(void *data) {
+int chash_frontend_periodic(void *data) {
   if(data) {
     if(stable >= 3) {
       struct aggregate *stats = get_stats();

@@ -1,6 +1,6 @@
 #ifndef _LIBCHASH_BACKEND_H
 #define _LIBCHASH_BACKEND_H
-#include "../chash.h"
+#include "chash.h"
 
 struct key**
 get_first_key(void);

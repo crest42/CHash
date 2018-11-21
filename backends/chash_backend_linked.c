@@ -1,6 +1,6 @@
-#include "../chash.h"
+#include "../include/chash.h"
+#include "../include/chash_backend.h"
 #include "../../chord/include/network.h"
-#include "chash_backend.h"
 #ifdef CHASH_BACKEND_LINKED
 extern struct chash_frontend frontend;
 

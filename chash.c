@@ -1,6 +1,6 @@
-#include "chash.h"
+#include "include/chash.h"
+#include "include/chash_backend.h"
 #include "../chord/include/chord.h"
-#include "backends/chash_backend.h"
 #include <assert.h>
 #include <errno.h>
 #include <sys/time.h>

@@ -1,7 +1,7 @@
 #ifndef _LIBCHASH_H
 #define _LIBCHASH_H
-#include "../chord/include/chord.h"
-#include "../chord/include/network.h"
+#include "../../chord/include/chord.h"
+#include "../../chord/include/network.h"
 
 #include <stdint.h>
 #define CHASH_OK (0)
@@ -35,13 +35,13 @@ typedef int (*chash_backend_get_f)(unsigned char*,
                                  nodeid_t *,
                                  uint32_t *);
 
-typedef int (*chash_frontend_put)(uint32_t,
+typedef int (*chash_frontend_put_f)(uint32_t,
                                  unsigned char *,
                                  uint32_t,
                                  uint32_t,
                                  unsigned char*);
 
-typedef int (*chash_frontend_get)(uint32_t,
+typedef int (*chash_frontend_get_f)(uint32_t,
                                  unsigned char*,
                                  uint32_t ,
                                  unsigned char *);
@@ -54,8 +54,8 @@ struct chash_backend {
 };
 
 struct chash_frontend {
-    chash_frontend_put put;
-    chash_frontend_get get;
+    chash_frontend_put_f put;
+    chash_frontend_get_f get;
     chord_callback put_handler;
     chord_callback get_handler;
     chord_callback sync_handler;
