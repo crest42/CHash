@@ -1,6 +1,7 @@
 #include "../chash.h"
 #include "../../chord/include/network.h"
-#include "chash_backend_linked.h"
+#include "chash_backend.h"
+#ifdef CHASH_BACKEND_LINKED
 extern struct chash_frontend frontend;
 
 struct key* first_key;
@@ -17,6 +18,10 @@ get_last_key(void)
   return &last_key;
 }
 
+int chash_backend_init(void *data) {
+  (void)data;
+  return CHASH_OK;
+}
 
 int remove_key(struct key *key) {
   struct key *search_key, *prev_key = NULL;
@@ -49,19 +54,20 @@ void dump(unsigned char *data,uint32_t size) {
     printf("\n");
 }
 
-struct key *get_key(nodeid_t id) {
+int get_key(nodeid_t id, struct key *k) {
   struct key* key = NULL;
   struct key** first_key = get_first_key();
   for (key = *first_key; key != NULL;
        key = key->next) {
          if(key->id == id) {
-           return key;
+           *k = *key;
+           return CHORD_OK;
          }
   }
-  return NULL;
+  return CHORD_ERR;
 }
 
-struct key *add_key(struct key *k, unsigned char *d) {
+int add_key(struct key *k, unsigned char *d) {
   struct key **first_key = get_first_key(), **last_key = get_last_key();
   if (*first_key == NULL) {
     *first_key = malloc(sizeof(struct key));
@@ -78,15 +84,15 @@ struct key *add_key(struct key *k, unsigned char *d) {
   new_key->next = NULL;
   new_key->data = malloc(new_key->size);
   memcpy(new_key->data, d, new_key->size);
-  return new_key;
+  return CHORD_OK;
 }
 
-int chash_linked_list_put(struct item *item, unsigned char *data) {
+int chash_backend_put(struct item *item, unsigned char *data) {
   nodeid_t id = get_mod_of_hash(item->hash, CHORD_RING_SIZE);
-  struct key *k = get_key(id);
-  if (k) {
-    assert((item->offset + item->size) <= k->size);
-    memcpy(k->data + item->offset, data, item->size);
+  struct key k;
+  if (get_key(id, &k) == CHORD_OK) {
+    assert((item->offset + item->size) <= k.size);
+    memcpy(k.data + item->offset, data, item->size);
   } else {
     struct key k;
     memcpy(k.hash, item->hash, HASH_DIGEST_SIZE);
@@ -106,7 +112,22 @@ void print_hash(unsigned char *hash, size_t size) {
     }
 }
 
-int chash_linked_list_get(unsigned char *hash, nodeid_t *id, uint32_t *size, unsigned char **data) {
+int chash_backend_get_data(unsigned char *hash, size_t size, unsigned char *buf) {
+  struct key* search_key = NULL;
+  struct key** first_key = get_first_key();
+  for (search_key = *first_key; search_key != NULL;
+       search_key = search_key->next) {
+    if (memcmp(hash,search_key->hash,HASH_DIGEST_SIZE) == 0) {
+      break;
+    }
+  }
+  if(search_key) {
+    memcpy(buf,search_key->data,size);
+  }
+  return CHASH_OK;
+}
+
+int chash_backend_get(unsigned char *hash, nodeid_t *id, uint32_t *size) {
   struct key* search_key = NULL;
   struct key** first_key = get_first_key();
   for (search_key = *first_key; search_key != NULL;
@@ -116,41 +137,13 @@ int chash_linked_list_get(unsigned char *hash, nodeid_t *id, uint32_t *size, uns
     }
   }
   if (search_key) {
-    *data = search_key->data;
     *size = search_key->size;
     *id   = search_key->id;
   } else {
-    *data = NULL;
     *size = 0;
     *id = 0;
   }
   return CHASH_OK;
 }
 
-/*
-static nodeid_t get_last_node(nodeid_t *id, int size) {
-  assert(id);
-  nodeid_t first = id[0];
-  nodeid_t ret = id[0];
-  for(int i = 1;i<size;i++) {
-    if(first == id[i]) {
-      return ret;
-    } else {
-      ret = id[i];
-    }
-  }
-  return id[size];
-}*/
-
-int push_key(uint32_t id, struct node *target) {
-  struct key* k = get_key(id);
-  unsigned char msg[MAX_MSG_SIZE];
-  marshal_msg(
-    MSG_TYPE_SYNC_REQ_FETCH, target->id, sizeof(struct key), (unsigned char*)k,msg);
-  add_msg_cont(k->data, msg, k->size, CHORD_HEADER_SIZE + sizeof(struct key));
-  chord_send_block_and_wait(
-    target, msg, CHORD_HEADER_SIZE + sizeof(struct key) + k->size, MSG_TYPE_NO_WAIT, NULL, 0, NULL);
-  return CHASH_OK;
-}
-
-//(uint32_t key_size, unsigned char *key, uint32_t offset, uint32_t data_size, unsigned char *data)
+#endif

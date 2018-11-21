@@ -1,5 +1,6 @@
 #include "chash.h"
 #include "../chord/include/chord.h"
+#include "backends/chash_backend.h"
 #include <assert.h>
 #include <errno.h>
 #include <sys/time.h>
@@ -16,10 +17,9 @@ static int chash_backend_default_put(struct item *item, unsigned char *data) {
   return CHASH_OK;
 }
 
-static int chash_backend_default_get(unsigned char *hash, nodeid_t *id,uint32_t *size, unsigned char **data) {
+static int chash_backend_default_get(unsigned char *hash, nodeid_t *id,uint32_t *size) {
     (void)id;
     (void)hash;
-    (void)data;
     (void)size;
     return CHASH_OK;
 }
@@ -75,7 +75,7 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
     cc->get_handler = frontend.get_handler;
   }
 
-  struct hooks *h        = get_hooks();
+  struct hooks* h = get_hooks();
   h->periodic_hook       = chash_periodic;
   cc->sync_handler       = frontend.sync_handler;
   cc->sync_fetch_handler = frontend.sync_fetch_handler;
@@ -99,9 +99,8 @@ send_chunk(unsigned char* buf,
   s += CHORD_HEADER_SIZE;
   add_msg_cont(buf,msg,item->size,s);
   s += item->size;
-
-  chord_msg_t type = chord_send_block_and_wait(
-    target, msg, s, MSG_TYPE_PUT_ACK, NULL, 0,NULL);
+  chord_msg_t type =
+    chord_send_block_and_wait(target, msg, s, MSG_TYPE_PUT_ACK, NULL, 0, NULL);
   if (type == MSG_TYPE_CHORD_ERR) {
     return CHORD_ERR;
   }
@@ -121,18 +120,21 @@ handle_get(chord_msg_t type,
   assert(msg_size > 0);
   DEBUG(INFO, "HANDLE GET CALLED\n");
   unsigned char msg[MAX_MSG_SIZE];
-  size_t        size;
-  unsigned char *content, *hash = data;
+  unsigned char buf[CHASH_CHUNK_SIZE];
+  size_t        size = 0;
+  unsigned char *hash = data;
   nodeid_t      id;
 
-  backend.get(hash,&id,(uint32_t*)&size,&content);
+  chash_backend_get(hash,&id,(uint32_t*)&size);
   chord_msg_t msg_type = MSG_TYPE_GET_RESP;
-  if(size == 0 || content == NULL) {
-    assert(size == 0 && content == NULL);
+  if(size == 0) {
     msg_type = MSG_TYPE_GET_EFAIL;
   }
-//printf("ret size %d\n",size);
-  marshal_msg(msg_type, src, size, content, msg);
+  if(size > 0) {
+    chash_backend_get_data(hash,size,buf);
+  }
+  //printf("ret size %d\n",size);
+  marshal_msg(msg_type, src, size, buf, msg);
   return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + size, s);
 }
 
@@ -161,7 +163,7 @@ handle_put(chord_msg_t type,
                sizeof(nodeid_t),
                (unsigned char*)&(get_own_node()->id),
                msg);
-  return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t),s);
+  return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), s);
 }
 
 int

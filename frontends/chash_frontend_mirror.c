@@ -1,13 +1,14 @@
 #include "../chash.h"
 #include "chash_frontend_mirror.h"
+#include "../backends/chash_backend.h"
 #include <stdio.h>
 
 extern int
 remove_key(struct key* key);
-extern struct key*
-get_key(nodeid_t id);
+extern int
+get_key(nodeid_t id,struct key *k);
 
-extern struct key*
+extern int
 add_key(struct key* k, unsigned char* d);
 
 uint32_t stable = 0, old = 0;
@@ -53,7 +54,6 @@ int chash_mirror_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, u
   int i = 0;
   do {
     find_successor(mynode, &target, id);
-    printf("look for %d at %d\n",get_mod_of_hash(out,CHORD_RING_SIZE),target.id);
     marshal_msg(
       MSG_TYPE_GET, target.id, HASH_DIGEST_SIZE, out, msg);
     type = chord_send_block_and_wait(
@@ -158,8 +158,9 @@ int handle_sync_fetch(chord_msg_t type,
   (void)type;
   (void)src;
   (void)s;
-  struct key* k = (struct key*)data;
-  if(!get_key(k->id)) {
+  (void)msg_size;
+  struct key *k = (struct key*)data, get;
+  if(get_key(k->id,&get) != CHORD_ERR) {
     add_key(k, data + sizeof(struct key));
   }
   return CHASH_OK;
@@ -171,6 +172,7 @@ int handle_sync(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size) {
   assert(type == MSG_TYPE_SYNC);
+  (void)type;
   unsigned char buf[MAX_MSG_SIZE];
   uint32_t offset = 0;
   struct key_range req = {.start = 0, .end = 0};
@@ -178,7 +180,8 @@ int handle_sync(chord_msg_t type,
     struct key_range *r  = (struct key_range *)(data + (i * sizeof(struct key_range)));
     assert(r->end - r->start <= CHORD_RING_SIZE);
     for(;r->start <= r->end;r->start = ((r->start+1)%CHORD_RING_SIZE)) {
-      if(!get_key(r->start)) {
+      struct key k;
+      if(get_key(r->start,&k) == CHORD_ERR) {
         if(req.start == 0) {
           req.start = r->start;
           req.end   = r->end;
@@ -227,5 +230,18 @@ int chash_mirror_periodic(void *data) {
   maint_global();
   DEBUG(INFO, "Start maint_local\n");
   maint_local();
+  return CHASH_OK;
+}
+
+
+int push_key(uint32_t id, struct node *target) {
+  struct key k;
+  get_key(id,&k);
+  unsigned char msg[MAX_MSG_SIZE];
+  marshal_msg(
+    MSG_TYPE_SYNC_REQ_FETCH, target->id, sizeof(struct key), (unsigned char*)&k,msg);
+  add_msg_cont(k.data, msg, k.size, CHORD_HEADER_SIZE + sizeof(struct key));
+  chord_send_block_and_wait(
+    target, msg, CHORD_HEADER_SIZE + sizeof(struct key) + k.size, MSG_TYPE_NO_WAIT, NULL, 0, NULL);
   return CHASH_OK;
 }
