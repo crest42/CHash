@@ -2,9 +2,7 @@
 #include "../../chord/include/network.h"
 #include "chash_backend.h"
 #include "mtd.h"
-#ifndef CHASH_BACKEND_RIOT_MTD 
-#define CHASH_BACKEND_RIOT_MTD
-#endif
+//#define CHASH_BACKEND_RIOT_MTD
 #ifdef CHASH_BACKEND_RIOT_MTD
 extern struct chash_frontend frontend;
 
@@ -29,18 +27,36 @@ static int get_pages_per_sector(void) {
 static int b_write_wrapper(mtd_dev_t *dev, const void *buff, uint32_t addr, uint32_t size) {
   int ret = -1;
   size_t sector_size = get_pages_per_sector() * get_page_size();
+  uint32_t sector_start = addr / sector_size;
+  uint32_t sector_end = (addr + size) / sector_size;
+  uint32_t offset = addr % sector_size;
+  uint32_t size_remaining = size;
   char buf[sector_size];
-  mtd_backend_dev->driver->read(dev, buf, (addr/sector_size)*sector_size, sizeof(buf));
-  memcpy(buf + (addr % sector_size), buff, size);
+  for (uint32_t i = sector_start; i <= sector_end;i++) {
+    if(i > sector_start) {
+      offset = 0;
+    }
+    if(offset+size_remaining > sector_size) {
+      size = sector_size - offset;
+    } else {
+      size = size_remaining;
+    }
+    addr = i * sector_size;
+    mtd_backend_dev->driver->read(
+      dev, buf, addr, sizeof(buf));
+    memcpy(buf + offset, buff, size);
 
-  if ((ret = mtd_backend_dev->driver->erase(dev, addr/sector_size, sector_size)) < 0) {
-    return ret;
-  }
-  for (int i = 0; i < (int)(sector_size / dev->page_size);i++) {
-    if ((ret = mtd_backend_dev->driver->write(dev, buf+(i*dev->page_size), ((addr/sector_size)+(i*dev->page_size)), dev->page_size)) <
-        0) {
+    if ((ret = mtd_backend_dev->driver->erase(
+           dev, addr, sector_size)) < 0) {
       return ret;
     }
+    for (int i = 0; i < (int)(sector_size / dev->page_size);i++) {
+      if ((ret = mtd_backend_dev->driver->write(dev, buf+(i*dev->page_size), ((addr)+(i*dev->page_size)), dev->page_size)) <
+          0) {
+        return ret;
+      }
+    }
+    size_remaining -= size;
   }
   return ret;
 }
@@ -96,10 +112,10 @@ int get_key(nodeid_t id, struct key *k) {
     addr = (uint32_t)tmp.next;
     mtd_backend_dev->driver->read(
       mtd_backend_dev, &tmp, addr, sizeof(struct key));
-
   }
   if(tmp.id == id) {
-    mtd_backend_dev->driver->read(mtd_backend_dev, k, addr, sizeof(struct key));
+    memcpy(k, &tmp, sizeof(struct key));
+    return CHORD_OK;
   }
   return CHASH_ERR;
 }
@@ -129,13 +145,10 @@ int add_key(struct key *k, unsigned char *d) {
     return CHASH_ERR;
   }
 
-      struct key tst;
-  mtd_backend_dev->driver->read(mtd_backend_dev, &tst, 0, sizeof(tst));
   if (b_write_wrapper(
-        mtd_backend_dev, &empty, (uint32_t)k->next, sizeof(struct key)) < 0) {
+        mtd_backend_dev, &empty, (uint32_t)k->next, sizeof(empty)) < 0) {
     return CHASH_ERR;
   }
-
   return CHASH_OK;
 }
 int chash_backend_put(struct item *item, unsigned char *data) {
