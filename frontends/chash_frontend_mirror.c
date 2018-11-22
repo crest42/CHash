@@ -123,7 +123,7 @@ static int maint_local(void) {
   uint32_t offset = 0;
   for (key = *first_key; key != NULL;
        key = key->next) {
-    if(in_interval(self->additional->predecessor,self,key->id)) {
+    if(in_interval(get_predecessor(),self,key->id)) {
       if(r.start == 0) {
         r.start = key->id;
         r.end   = key->id;
