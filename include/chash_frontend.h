@@ -15,8 +15,6 @@ chash_frontend_get(uint32_t key_size,
                  uint32_t buf_size,
                  unsigned char* buf);
 
-int chash_frontend_maint(void *data);
-
 int
 handle_sync(chord_msg_t type,
             unsigned char* data,

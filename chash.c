@@ -10,8 +10,10 @@
 
 struct chash_backend backend;
 struct chash_frontend frontend;
-
-static int chash_backend_default_put(struct item *item, unsigned char *data) {
+extern struct node* self;
+static int
+chash_backend_default_put(struct item* item, unsigned char* data)
+{
   (void)item;
   (void)data;
   return CHASH_OK;
@@ -161,7 +163,7 @@ handle_put(chord_msg_t type,
   marshal_msg(msg_type,
                src,
                sizeof(nodeid_t),
-               (unsigned char*)&(get_own_node()->id),
+               (unsigned char*)&(self->id),
                msg);
   return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), s);
 }
@@ -206,7 +208,7 @@ put(unsigned char* data, size_t size)
   item.block = 0;
   hash(item.hash, data, item.size, HASH_DIGEST_SIZE);
   find_successor(
-    get_own_node(), &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
+    self, &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
   return put_raw(data, &item, &target);
 }
 
@@ -217,7 +219,7 @@ get_raw(unsigned char *hash, unsigned char* buf,uint32_t size){
   unsigned char msg[CHORD_HEADER_SIZE + HASH_DIGEST_SIZE];
   nodeid_t id = get_mod_of_hash(hash,CHORD_RING_SIZE);
   struct node target;
-  struct node *mynode = get_own_node();
+  struct node *mynode = self;
   find_successor(mynode, &target, id);
   marshal_msg(
     MSG_TYPE_GET, target.id, HASH_DIGEST_SIZE, hash, msg);

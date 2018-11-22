@@ -11,6 +11,9 @@ get_key(nodeid_t id,struct key *k);
 extern int
 add_key(struct key* k, unsigned char* d);
 
+extern struct node* self;
+extern struct node* successorlist;
+extern struct aggregate stats;
 uint32_t stable = 0, old = 0;
 
 int
@@ -28,13 +31,13 @@ chash_frontend_put(uint32_t key_size,
   item.block = *((uint32_t *)key);
   hash(item.hash, key, key_size, HASH_DIGEST_SIZE);
   find_successor(
-    get_own_node(), &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
+    self, &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
   nodeid_t first = target.id;
   int i = 0;
   do {
     //printf("put item with id %d on node %d\n",get_mod_of_hash(item.hash, CHORD_RING_SIZE),target.id);
     put_raw(data, &item, &target);
-    find_successor(get_own_node(), &target, target.id);
+    find_successor(self, &target, target.id);
     //printf("next: %d\n",target.id);
     i++;
   } while (first != target.id && i != REPLICAS);
@@ -49,7 +52,7 @@ int chash_frontend_get(uint32_t key_size, unsigned char *key, uint32_t buf_size,
     unsigned char msg[CHORD_HEADER_SIZE + HASH_DIGEST_SIZE];
   nodeid_t id = get_mod_of_hash(out,CHORD_RING_SIZE);
   struct node target;
-  struct node *mynode = get_own_node();
+  struct node *mynode = self;
   chord_msg_t type = -1;
   int i = 0;
   do {
@@ -71,14 +74,14 @@ static int maint_global(void) {
   struct node successor;
   nodeid_t successorlist[SUCCESSORLIST_SIZE];
   for (key = *first_key; key != NULL; key = key->next) {
-    find_successor(get_own_node(), &successor, key->id);
+    find_successor(self, &successor, key->id);
     bool owns = false;
-    if (successor.id == get_own_node()->id) {
+    if (successor.id == self->id) {
       owns = true;
     } else {
       get_successorlist_id(&successor, successorlist);
       for (int i = 0; i < REPLICAS - 1; i++) {
-        if (successorlist[i] == get_own_node()->id) {
+        if (successorlist[i] == self->id) {
           owns = true;
           break;
         }
@@ -100,9 +103,8 @@ static void add_interval(struct key_range *r,unsigned char *buf, uint32_t *offse
 }
 
 static int maint_sync(unsigned char *buf, uint32_t size) {
-  struct node *successorlist = get_successorlist();
   for(int i = 0;i<REPLICAS-1;i++) {
-    if(successorlist[i].id == get_own_node()->id) {
+    if(successorlist[i].id == self->id) {
       break;
     }
     sync_node(buf,size,&successorlist[i]);
@@ -114,7 +116,7 @@ static int maint_local(void) {
   //TODO: Do not assume that all keys fit into a single message. Atm buf is floor(1004/8) = 125 keys
   struct key* key = NULL;
   struct key** first_key = get_first_key();
-  struct node *self = get_own_node();
+  struct node *self = self;
   unsigned char buf[MAX_MSG_SIZE-CHORD_HEADER_SIZE];
   memset(buf,0,sizeof(buf));
   struct key_range r = {.start = 0, .end = 0};
@@ -208,9 +210,8 @@ int handle_sync(chord_msg_t type,
 int chash_frontend_periodic(void *data) {
   if(data) {
     if(stable >= 3) {
-      struct aggregate *stats = get_stats();
       //printf("s: %d sec: %d\n",stats->available,stats->available/128);
-      *((uint32_t *)data) = (int)(stats->available / 128);
+      *((uint32_t *)data) = (int)(stats.available / 128);
     } else {
       uint32_t tmp = *((uint32_t*)data);
       if(tmp == old) {
