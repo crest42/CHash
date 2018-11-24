@@ -1,6 +1,7 @@
 #ifndef _LIBCHASH_H
 #define _LIBCHASH_H
 #include "../../chord/include/chord.h"
+#include "../../chord/include/chord_util.h"
 #include "../../chord/include/network.h"
 
 #include <stdint.h>
