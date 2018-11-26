@@ -11,6 +11,7 @@
 struct chash_backend backend;
 struct chash_frontend frontend;
 extern struct node* self;
+
 static int
 chash_backend_default_put(struct item* item, unsigned char* data)
 {
@@ -57,7 +58,6 @@ static int chash_periodic(void *data) {
 int
 init_chash(struct chash_backend *b,struct chash_frontend *f)
 {
-  struct chord_callbacks* cc = get_callbacks();
   if(!b) {
     backend.put = chash_backend_default_put;
     backend.get = chash_backend_default_get;
@@ -68,19 +68,19 @@ init_chash(struct chash_backend *b,struct chash_frontend *f)
   if(!f) {
     frontend.put = chash_frontend_default_put;
     frontend.get = chash_frontend_default_get;
-    cc->put_handler = handle_put;
-    cc->get_handler = handle_get;
+    set_callback(MSG_TYPE_PUT, handle_put);
+    set_callback(MSG_TYPE_GET, handle_get);
     frontend.periodic_data = NULL;
   } else {
     frontend = *f;
-    cc->put_handler = frontend.put_handler;
-    cc->get_handler = frontend.get_handler;
+    set_callback(MSG_TYPE_PUT, frontend.put_handler);
+    set_callback(MSG_TYPE_GET, frontend.get_handler);
   }
 
   struct hooks* h = get_hooks();
   h->periodic_hook       = chash_periodic;
-  cc->sync_handler       = frontend.sync_handler;
-  cc->sync_fetch_handler = frontend.sync_fetch_handler;
+  set_callback(MSG_TYPE_SYNC, frontend.sync_handler);
+  set_callback(MSG_TYPE_SYNC_REQ_FETCH, frontend.sync_fetch_handler);
   return CHORD_OK;
 }
 
