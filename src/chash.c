@@ -1,11 +1,10 @@
-#include "include/chash.h"
-#include "include/chash_backend.h"
-#include "../chord/include/chord.h"
+#include "../include/chash.h"
+#include "../include/chash_backend.h"
 #include <assert.h>
 #include <errno.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include<stdio.h>
+#include <stdio.h>
 
 
 struct chash_backend backend;
