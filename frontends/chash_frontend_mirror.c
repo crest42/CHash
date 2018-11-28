@@ -1,7 +1,7 @@
 #include "../include/chash.h"
 #include "../include/chash_frontend.h"
 #include "../include/chash_backend.h"
-#include <stdio.h>
+#include <limits.h>
 
 extern int
 remove_key(struct key* key);
@@ -223,8 +223,6 @@ int chash_frontend_periodic(void *data) {
     if(stable >= UINT_MAX) {
       stable = 3;
     }
-  } else {
-    printf("no data\n");
   }
   //TODO: Error handling
   DEBUG(INFO, "Start maint_global\n");

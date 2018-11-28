@@ -46,14 +46,6 @@ int remove_key(struct key *key) {
   }
   return CHASH_OK;
 }
-
-void dump(unsigned char *data,uint32_t size) {
-    for(uint32_t i = 0;i<size;i++) {
-        printf("%02x",data[i]);
-    }
-    printf("\n");
-}
-
 int get_key(nodeid_t id, struct key *k) {
   struct key* key = NULL;
   struct key** first_key = get_first_key();
@@ -104,12 +96,6 @@ int chash_backend_put(struct item *item, unsigned char *data) {
     add_key(&k, data);
   }
   return CHASH_OK;
-}
-
-void print_hash(unsigned char *hash, size_t size) {
-    for(size_t i = 0;i<size;i++) {
-        printf("%x",hash[i]);
-    }
 }
 
 int chash_backend_get_data(unsigned char *hash, size_t size, unsigned char *buf) {
