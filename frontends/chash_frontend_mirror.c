@@ -5,8 +5,6 @@
 
 extern int
 remove_key(struct key* key);
-extern int
-get_key(nodeid_t id,struct key *k);
 
 extern int
 add_key(struct key* k, unsigned char* d);
@@ -18,10 +16,10 @@ uint32_t stable = 0, old = 0;
 
 int
 chash_frontend_put(uint32_t key_size,
-                 unsigned char* key,
-                 uint32_t offset,
-                 uint32_t data_size,
-                 unsigned char* data)
+                  unsigned char* key,
+                  uint32_t offset,
+                  uint32_t data_size,
+                  unsigned char* data)
 {
   struct item item;
   struct node target;
@@ -116,14 +114,13 @@ static int maint_local(void) {
   //TODO: Do not assume that all keys fit into a single message. Atm buf is floor(1004/8) = 125 keys
   struct key* key = NULL;
   struct key** first_key = get_first_key();
-  struct node *self = self;
   unsigned char buf[MAX_MSG_SIZE-CHORD_HEADER_SIZE];
   memset(buf,0,sizeof(buf));
   struct key_range r = {.start = 0, .end = 0};
   uint32_t offset = 0;
   for (key = *first_key; key != NULL;
        key = key->next) {
-    if(in_interval(get_predecessor(),self,key->id)) {
+    if (in_interval(get_predecessor(), self, key->id)) {
       if(r.start == 0) {
         r.start = key->id;
         r.end   = key->id;
@@ -162,7 +159,7 @@ int handle_sync_fetch(chord_msg_t type,
   (void)s;
   (void)msg_size;
   struct key *k = (struct key*)data, get;
-  if(get_key(k->id,&get) != CHORD_ERR) {
+  if (get_key(NULL,k->id, &get) != CHORD_ERR) {
     add_key(k, data + sizeof(struct key));
   }
   return CHASH_OK;
@@ -183,7 +180,7 @@ int handle_sync(chord_msg_t type,
     assert(r->end - r->start <= CHORD_RING_SIZE);
     for(;r->start <= r->end;r->start = ((r->start+1)%CHORD_RING_SIZE)) {
       struct key k;
-      if(get_key(r->start,&k) == CHORD_ERR) {
+      if(get_key(NULL,r->start,&k) == CHORD_ERR) {
         if(req.start == 0) {
           req.start = r->start;
           req.end   = r->end;
@@ -235,7 +232,7 @@ int chash_frontend_periodic(void *data) {
 
 int push_key(uint32_t id, struct node *target) {
   struct key k;
-  get_key(id,&k);
+  get_key(NULL,id,&k);
   unsigned char msg[MAX_MSG_SIZE];
   marshal_msg(
     MSG_TYPE_SYNC_REQ_FETCH, target->id, sizeof(struct key), (unsigned char*)&k,msg);

@@ -21,7 +21,7 @@ int
 remove_key(struct key* key);
 
 int
-get_key(nodeid_t id, struct key *k);
+get_key(unsigned char* hash, uint32_t id, struct key* k);
 
 int
 add_key(struct key* k, unsigned char* d);

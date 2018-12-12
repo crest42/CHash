@@ -4,6 +4,7 @@
 #ifdef CHASH_BACKEND_LINKED
 extern struct chash_frontend frontend;
 
+uint32_t key_count;
 struct key* first_key;
 struct key* last_key;
 struct key**
@@ -24,6 +25,7 @@ int chash_backend_init(void *data) {
 }
 
 int remove_key(struct key *key) {
+  key_count--;
   struct key *search_key, *prev_key = NULL;
   struct key **first_key = get_first_key(), **last_key = get_last_key();
   for (search_key = *first_key; search_key != NULL;
@@ -46,12 +48,13 @@ int remove_key(struct key *key) {
   }
   return CHASH_OK;
 }
-int get_key(nodeid_t id, struct key *k) {
+
+int get_key(unsigned char *hash, uint32_t id, struct key *k) {
   struct key* key = NULL;
   struct key** first_key = get_first_key();
   for (key = *first_key; key != NULL;
        key = key->next) {
-         if(key->id == id) {
+         if((hash == NULL && key->id == id) || memcmp(hash,key->hash,HASH_DIGEST_SIZE) == 0) {
            *k = *key;
            return CHORD_OK;
          }
@@ -60,6 +63,7 @@ int get_key(nodeid_t id, struct key *k) {
 }
 
 int add_key(struct key *k, unsigned char *d) {
+  key_count++;
   struct key **first_key = get_first_key(), **last_key = get_last_key();
   if (*first_key == NULL) {
     *first_key = malloc(sizeof(struct key));
@@ -80,15 +84,14 @@ int add_key(struct key *k, unsigned char *d) {
 }
 
 int chash_backend_put(struct item *item, unsigned char *data) {
-  nodeid_t id = get_mod_of_hash(item->hash, CHORD_RING_SIZE);
   struct key k;
-  if (get_key(id, &k) == CHORD_OK) {
+  if (get_key(item->hash,0, &k) == CHORD_OK) {
     assert((item->offset + item->size) <= k.size);
     memcpy(k.data + item->offset, data, item->size);
   } else {
     struct key k;
     memcpy(k.hash, item->hash, HASH_DIGEST_SIZE);
-    k.id = id;
+    k.id = get_mod_of_hash(item->hash, CHORD_RING_SIZE);
     k.next = NULL;
     k.size = item->size;
     k.block = item->block;

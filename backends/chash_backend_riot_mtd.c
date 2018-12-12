@@ -101,7 +101,8 @@ int remove_key(struct key *key) {
   return CHASH_OK;
 }
 
-int get_key(nodeid_t id, struct key *k) {
+int get_key(unsigned char *hash, uint32_t id, struct key *k) {
+  (void)hash;
   struct key tmp;
   uint32_t addr = 0;
   mtd_backend_dev->driver->read(mtd_backend_dev, &tmp, addr, sizeof(struct key));
@@ -154,7 +155,7 @@ int add_key(struct key *k, unsigned char *d) {
 int chash_backend_put(struct item *item, unsigned char *data) {
   nodeid_t id = get_mod_of_hash(item->hash, CHORD_RING_SIZE);
   struct key k;
-  if (get_key(id, &k) == CHORD_OK) {
+  if (get_key(NULL,id, &k) == CHORD_OK) {
     assert((item->offset + item->size) <= k.size);
     b_write_wrapper(mtd_backend_dev,data,(uint32_t)(k.data+item->offset),item->size);
   } else {
