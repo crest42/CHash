@@ -10,7 +10,7 @@ extern int
 add_key(struct key* k, unsigned char* d);
 
 extern struct node* self;
-extern struct node* successorlist;
+extern chord_node_t successorlist[SUCCESSORLIST_SIZE];
 extern struct aggregate stats;
 uint32_t stable = 0, old = 0;
 
@@ -31,20 +31,17 @@ chash_frontend_put(uint32_t key_size,
   find_successor(
     self, &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
   nodeid_t first = target.id;
-  int i = 0;
+  int i = 0, ret = 0;
   do {
-    //printf("put item with id %d on node %d\n",get_mod_of_hash(item.hash, CHORD_RING_SIZE),target.id);
     put_raw(data, &item, &target);
-    find_successor(self, &target, target.id);
-    //printf("next: %d\n",target.id);
+    ret = find_successor(self, &target, target.id);
     i++;
-  } while (first != target.id && i != REPLICAS);
+  } while (first != target.id && i != REPLICAS && ret == CHORD_OK);
 
   return CHASH_OK;
 }
 
 int chash_frontend_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, unsigned char *buf) {
-  //printf("read block %d with buf size %d\n",*((uint32_t *)key),buf_size);
   unsigned char out[HASH_DIGEST_SIZE];
   hash(out, key, key_size, HASH_DIGEST_SIZE);
     unsigned char msg[CHORD_HEADER_SIZE + HASH_DIGEST_SIZE];
@@ -96,13 +93,13 @@ static int maint_global(void) {
 }
 
 static void add_interval(struct key_range *r,unsigned char *buf, uint32_t *offset) {
-  memcpy(buf+*offset,r,sizeof(struct key_range));
+  memcpy(buf+(*offset),r,sizeof(struct key_range));
   *offset += sizeof(struct key_range);
 }
 
 static int maint_sync(unsigned char *buf, uint32_t size) {
   for(int i = 0;i<REPLICAS-1;i++) {
-    if(successorlist[i].id == self->id) {
+    if (successorlist[i].id == self->id) {
       break;
     }
     sync_node(buf,size,&successorlist[i]);
@@ -114,12 +111,13 @@ static int maint_local(void) {
   //TODO: Do not assume that all keys fit into a single message. Atm buf is floor(1004/8) = 125 keys
   struct key* key = NULL;
   struct key** first_key = get_first_key();
-  unsigned char buf[MAX_MSG_SIZE-CHORD_HEADER_SIZE];
+  unsigned char buf[MAX_CONTENT_SIZE];
   memset(buf,0,sizeof(buf));
   struct key_range r = {.start = 0, .end = 0};
   uint32_t offset = 0;
-  for (key = *first_key; key != NULL;
-       key = key->next) {
+  uint32_t i = 0;
+  for (key = *first_key; key != NULL; key = key->next) {
+    i++;
     if (in_interval(get_predecessor(), self, key->id)) {
       if(r.start == 0) {
         r.start = key->id;
@@ -138,10 +136,8 @@ static int maint_local(void) {
   if(r.start != 0 && r.end != 0) {
     add_interval(&r,buf,&offset);
   }
-  /*for(uint32_t i = 0;i<offset;i+=(sizeof(nodeid_t)*2)) {
-    printf("range %d is from %d to %d\n",i,*((nodeid_t *)(&buf[i])),*((nodeid_t *)(&buf[i+sizeof(nodeid_t)])));
-  }*/
-  if(offset > 0) {
+  assert(offset < sizeof(buf));
+  if (offset > 0) {
     maint_sync(buf,offset);
   }
   return CHASH_OK;
@@ -159,7 +155,7 @@ int handle_sync_fetch(chord_msg_t type,
   (void)s;
   (void)msg_size;
   struct key *k = (struct key*)data, get;
-  if (get_key(NULL,k->id, &get) != CHORD_ERR) {
+  if (get_key(NULL,k->id, &get) == CHORD_ERR) {
     add_key(k, data + sizeof(struct key));
   }
   return CHASH_OK;
@@ -207,7 +203,6 @@ int handle_sync(chord_msg_t type,
 int chash_frontend_periodic(void *data) {
   if(data) {
     if(stable >= 3) {
-      //printf("s: %d sec: %d\n",stats->available,stats->available/128);
       *((uint32_t *)data) = (int)(stats.available / 128);
     } else {
       uint32_t tmp = *((uint32_t*)data);

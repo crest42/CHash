@@ -54,7 +54,7 @@ int get_key(unsigned char *hash, uint32_t id, struct key *k) {
   struct key** first_key = get_first_key();
   for (key = *first_key; key != NULL;
        key = key->next) {
-         if((hash == NULL && key->id == id) || memcmp(hash,key->hash,HASH_DIGEST_SIZE) == 0) {
+         if((hash == NULL && key->id == id) || (hash && memcmp(hash,key->hash,HASH_DIGEST_SIZE) == 0)) {
            *k = *key;
            return CHORD_OK;
          }

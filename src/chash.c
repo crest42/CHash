@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <stdio.h>
 
 
 struct chash_backend backend;
@@ -92,7 +91,6 @@ send_chunk(unsigned char* buf,
   unsigned char msg[MAX_MSG_SIZE];
   memset(msg,0,sizeof(msg));
   DEBUG(INFO, "Send %d bytes (%p) to node %d\n", item->size, buf, target->id);
-  //printf( "Send %d bytes (%p) with offset %d to node %d\n", size, buf,offset, target->id);
 
   size_t s = sizeof(struct item);
   marshal_msg(
@@ -134,7 +132,6 @@ handle_get(chord_msg_t type,
   if(size > 0) {
     chash_backend_get_data(hash,size,buf);
   }
-  //printf("ret size %d\n",size);
   marshal_msg(msg_type, src, size, buf, msg);
   return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + size, s);
 }
@@ -151,7 +148,6 @@ handle_put(chord_msg_t type,
   assert(type == MSG_TYPE_PUT);
   assert(msg_size > 0);
   DEBUG(INFO, "HANDLE PUT CALLED. Send answer\n");
-  //printf( "HANDLE PUT CALLED. Send answer\n");
   struct item* item = (struct item*)data;
   unsigned char *cont = data + sizeof(struct item);
   chord_msg_t msg_type = MSG_TYPE_PUT_ACK;
@@ -249,7 +245,7 @@ int sync_node(unsigned char *buf,uint32_t size,struct node *target) {
   size_t resp_size = 0;
   chord_send_block_and_wait(target,
                             msg,
-                            sizeof(msg),
+                            size+CHORD_HEADER_SIZE,
                             MSG_TYPE_SYNC_REQ_FETCH,
                             msg,
                             sizeof(msg),
@@ -257,7 +253,7 @@ int sync_node(unsigned char *buf,uint32_t size,struct node *target) {
   for (uint32_t i = 0; i < resp_size / sizeof(struct key_range);i++) {
     struct key_range* r = ((struct key_range*)(msg)) + i;
     for (uint32_t i = r->start; i != (r->end+1);i = (i+1)%CHORD_RING_SIZE) {
-      push_key(i,target);
+      push_key(i, target);
     }
   }
   return CHORD_OK;
