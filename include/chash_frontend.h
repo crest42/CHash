@@ -1,6 +1,6 @@
 #ifndef CHORD_FRONTEND_H
 #define CHASH_FRONTEND_H
-#define REPLICAS (2)
+#define REPLICAS (1)
 
 int
 chash_frontend_put(uint32_t key_size,
@@ -31,4 +31,7 @@ handle_sync_fetch(chord_msg_t type,
 
 int
 chash_frontend_periodic(void* data);
+
+void
+frontend_reset(void);
 #endif // CHASH_FRONTEND_MIRROR_H

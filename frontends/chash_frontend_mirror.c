@@ -1,6 +1,7 @@
 #include "../include/chash.h"
 #include "../include/chash_frontend.h"
 #include "../include/chash_backend.h"
+#include "xtimer.h"
 #include <limits.h>
 
 extern int
@@ -14,6 +15,17 @@ extern chord_node_t successorlist[SUCCESSORLIST_SIZE];
 extern struct aggregate stats;
 uint32_t stable = 0, old = 0;
 
+void frontend_reset(void) {
+  struct key** first = get_first_key();
+  for (struct key* k = *first; k != NULL;) {
+    struct key* next = k->next;
+    free(k->data);
+    free(k);
+    k = next;
+  }
+  *first = NULL;
+}
+
 int
 chash_frontend_put(uint32_t key_size,
                   unsigned char* key,
@@ -21,6 +33,7 @@ chash_frontend_put(uint32_t key_size,
                   uint32_t data_size,
                   unsigned char* data)
 {
+
   struct item item;
   struct node target;
   item.size = data_size;
@@ -32,14 +45,18 @@ chash_frontend_put(uint32_t key_size,
     self, &target, get_mod_of_hash(item.hash, CHORD_RING_SIZE));
   nodeid_t first = target.id;
   int i = 0, ret = 0;
+
   do {
     put_raw(data, &item, &target);
-    ret = find_successor(self, &target, target.id);
+    if(REPLICAS > 1) {
+      ret = find_successor(self, &target, target.id);
+    }
     i++;
   } while (first != target.id && i != REPLICAS && ret == CHORD_OK);
 
-  return CHASH_OK;
+            return CHASH_OK;
 }
+
 
 int chash_frontend_get(uint32_t key_size, unsigned char *key, uint32_t buf_size, unsigned char *buf) {
   unsigned char out[HASH_DIGEST_SIZE];
